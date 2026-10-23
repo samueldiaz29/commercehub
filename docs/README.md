@@ -28,6 +28,8 @@ La documentación se organiza en las siguientes carpetas y documentos especializ
 ```
 docs/
 ├── README.md                                  # Índice general y guía de gobernanza (este archivo)
+├── conventions/
+│   └── convenciones-de-desarrollo.md          # Estándares de desarrollo, nomenclatura y git
 ├── requirements/
 │   └── historias-de-usuario.md                # Historias de usuario, criterios de aceptación y épicas
 ├── business-rules/

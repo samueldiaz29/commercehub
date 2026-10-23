@@ -1,2 +1,140 @@
-# commercehub
-CommerceHub es una tienda online general en la que los clientes pueden explorar productos, administrar su carrito, realizar compras con pagos de prueba y consultar sus pedidos. Los administradores pueden gestionar el catálogo, el inventario y los pedidos.
+# CommerceHub
+
+**CommerceHub** es un proyecto de plataforma de comercio electrónico monocomercio (*single-merchant*). Su arquitectura objetivo se basa en microservicios desacoplados y patrones de consistencia eventual. Actualmente, el repositorio contiene la estructura inicial y documentación del proyecto; las funcionalidades de la plataforma aún no están implementadas.
+
+---
+
+## 1. Propósito y Alcance del Sistema (Objetivos de Arquitectura)
+
+Como objetivos funcionales previstos —aún no implementados—, CommerceHub permitirá:
+
+**A los clientes:**
+- Explorar el catálogo de productos y categorías con precios oficiales en soles peruanos (**PEN**).
+- Gestionar un carrito de compras persistente.
+- Ejecutar un proceso de **Checkout** coordinado mediante una **Saga Orquestada y Persistente**, con reserva temporal de stock (TTL de 15 minutos), tarifa plana de envío (**S/ 10.00**) y procesamiento de cobro simulado e idempotente con aislamiento de datos sensibles de tarjetas (sin almacenamiento de PAN ni CVV).
+- Consultar el historial y estado logístico de sus pedidos, así como solicitar cancelaciones directas antes del empaque.
+
+**A los administradores:**
+- Administrar el catálogo de productos y categorías.
+- Controlar existencias físicas y auditoría de inventario (Kardex).
+- Gestionar las etapas de preparación, despacho y entrega de pedidos.
+- Consultar métricas de ventas y débitos auditados por reembolsos confirmados.
+
+---
+
+## 2. Estructura del Monorepo
+
+El repositorio contiene la estructura base de un monorepo modular. Los directorios mostrados son organizativos; los microservicios, el frontend y Docker Compose todavía no están implementados.
+
+```
+commercehub/
+├── docs/                     # Documentación técnica, funcional, ADRs y contratos
+├── frontend/                 # Directorio base previsto para la SPA (React + TypeScript)
+├── infrastructure/           # Configuración de infraestructura y despliegue
+│   ├── docker/               # Directorio base previsto para Docker Compose
+│   ├── monitoring/           # Directorio base previsto para observabilidad
+│   └── terraform/            # Directorio base previsto para infraestructura como código
+├── scripts/                  # Scripts de inicialización, seeds y utilidades
+├── services/                 # Directorios base previstos para servicios backend (Java 25 / Spring Boot)
+│   ├── api-gateway/          # Enrutamiento perimetral, CORS y validación JWT
+│   ├── catalog-service/      # Catálogo de productos, categorías y precios
+│   ├── inventory-service/    # Existencias, reservas temporales (15 min) y kardex
+│   ├── notification-service/ # Consumidor asíncrono para notificaciones al cliente
+│   ├── order-service/        # Carrito, pedidos y orquestación de la Saga
+│   └── payment-service/      # Pagos simulados, idempotencia y reembolsos
+├── .editorconfig             # Convenciones de edición y formato uniforme
+├── .env.example              # Variables de entorno de referencia para desarrollo local
+├── .gitignore                # Reglas estrictas de exclusión de artefactos y secretos
+├── LICENSE                   # Licencia del proyecto
+└── README.md                 # Descripción del proyecto e instrucciones iniciales (este archivo)
+```
+
+---
+
+## 3. Stack Tecnológico Aprobado
+
+> [!NOTE]
+> Las siguientes tecnologías y herramientas corresponden a las **decisiones arquitectónicas aprobadas** (ver [ADRs](docs/adr/)). En la fase actual del repositorio, **los microservicios, el frontend y la orquestación local con Docker Compose todavía no están implementados**.
+
+| Componente | Tecnología o patrón aprobado | Alcance previsto |
+| :--- | :--- | :--- |
+| **Lenguaje base** | **Java 25 (LTS)** | Versión aprobada para los servicios backend, todavía no incorporada en código. |
+| **Framework backend** | **Spring Boot** | Base prevista para los servicios backend. |
+| **Borde / Perímetro** | **Spring Cloud Gateway** | Gateway reactivo y validación JWT como objetivos de arquitectura. |
+| **Servicios de negocio** | **Spring MVC + Spring Data JPA** | Stack imperativo aprobado para servicios transaccionales. |
+| **Persistencia** | **PostgreSQL / Neon** y patrón **Database-per-Service** | Persistencia aislada por servicio, aún no implementada. |
+| **Migración de esquemas** | **Flyway** | Migraciones versionadas previstas. |
+| **Mensajería asíncrona** | **RabbitMQ**, Outbox y DLQ | Patrones aprobados para eventos; no hay broker ni integración implementados. |
+| **Gestión de identidad** | **Keycloak (OIDC / OAuth2)** | Integración y roles `CUSTOMER` y `ADMIN` previstos. |
+| **Frontend** | **React + TypeScript** | SPA prevista; no implementada. |
+| **Testing** | **JUnit 5, Mockito, Testcontainers** | Herramientas aprobadas; no hay pruebas ni dependencias de aplicación incorporadas. |
+| **Entorno local** | **Docker Compose** | Orquestación prevista; no implementada. |
+
+---
+
+## 4. Requisitos Previos del Entorno
+
+El repositorio en su estado actual solo requiere Git. JDK 25, Node.js y Docker/Compose serán necesarios en las fases en que se implementen los componentes correspondientes:
+
+1. **Java Development Kit (JDK) 25** (Versión LTS)
+   - Verificar con: `java -version`
+2. **Node.js (versión 20 LTS o superior)** y gestor de paquetes (`npm` o `pnpm`)
+   - Verificar con: `node -v` y `npm -v`
+3. **Docker y Docker Compose v2**
+   - Verificar con: `docker --version` y `docker compose version`
+4. **Git**
+   - Verificar con: `git --version`
+
+---
+
+## 5. Instrucciones Iniciales de Desarrollo
+
+### 5.1 Clonar el Repositorio
+
+```bash
+git clone https://github.com/samueldiaz29/commercehub.git
+cd commercehub
+```
+
+### 5.2 Configurar las Variables de Entorno
+
+El repositorio provee una plantilla con valores ficticios para desarrollo local:
+
+```bash
+cp .env.example .env
+```
+
+> [!CAUTION]
+> NUNCA incorpores contraseñas productivas, llaves privadas ni credenciales reales en el archivo `.env`. El archivo `.env` se encuentra ignorado por Git.
+
+### 5.3 Estado del Proyecto: Funcionalidades Implementadas vs. Pendientes
+
+Actualmente, lo **implementado** en el repositorio se limita a la **estructura base y documentación del monorepo**:
+- Estructura modular de directorios para microservicios, frontend, infraestructura y scripts.
+- Reglas uniformes de formato y edición ([`.editorconfig`](.editorconfig)).
+- Exclusiones estrictas para evitar fugas de secretos y artefactos de compilación ([`.gitignore`](.gitignore)).
+- Plantilla de variables de entorno de desarrollo con valores simulados seguros ([`.env.example`](.env.example)).
+- Documentación canónica completa de arquitectura, contratos, reglas de negocio e historias de usuario ([`docs/`](docs/README.md)).
+
+> [!IMPORTANT]
+> **Componentes aún no implementados:**
+> - **Microservicios backend (`services/*`):** `api-gateway`, `catalog-service`, `inventory-service`, `notification-service`, `order-service` y `payment-service` **no están implementados** ni contienen código ejecutable en esta fase. Sus directorios contienen únicamente marcadores estructurales (`.gitkeep`). Se implementarán progresivamente en las Issues dedicadas a cada dominio.
+> - **Frontend (`frontend/`):** La aplicación cliente (React + TypeScript) **no está implementada** ni inicializada todavía.
+> - **Orquestación local (`infrastructure/docker/`):** Los manifiestos de Docker Compose **no están implementados todavía**. **No intentes ejecutar `docker compose up`** ni comandos de arranque de servicios en esta fase.
+
+---
+
+## 6. Convenciones y Documentación Canónica
+
+Las decisiones técnicas y de negocio aprobadas están documentadas en [`docs/`](docs/README.md):
+
+- **Guía de Gobernanza y Navegación:** [`docs/README.md`](docs/README.md)
+- **Convenciones de Desarrollo y Código:** [`docs/conventions/convenciones-de-desarrollo.md`](docs/conventions/convenciones-de-desarrollo.md)
+- **Arquitectura C4 y Límites de Contexto:** [`docs/architecture/arquitectura.md`](docs/architecture/arquitectura.md)
+- **Saga de Checkout:** [`docs/architecture/saga-checkout.md`](docs/architecture/saga-checkout.md)
+- **Contratos de API REST:** [`docs/api/contratos.md`](docs/api/contratos.md)
+- **Eventos y Topología RabbitMQ:** [`docs/api/eventos.md`](docs/api/eventos.md)
+- **Reglas de Negocio Transversales:** [`docs/business-rules/reglas-transversales.md`](docs/business-rules/reglas-transversales.md)
+- **Máquinas de Estado y Transiciones:** [`docs/business-rules/estados-y-transiciones.md`](docs/business-rules/estados-y-transiciones.md)
+- **Historias de Usuario y Criterios de Aceptación:** [`docs/requirements/historias-de-usuario.md`](docs/requirements/historias-de-usuario.md)
+- **Decisiones Arquitectónicas (ADRs):** [`docs/adr/`](docs/adr/)
