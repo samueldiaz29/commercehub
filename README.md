@@ -24,14 +24,14 @@ Como objetivos funcionales previstos —aún no implementados—, CommerceHub pe
 
 ## 2. Estructura del Monorepo
 
-El repositorio contiene la estructura base de un monorepo modular. Los seis módulos backend tienen esqueletos Maven y clases de inicio; sus funcionalidades de negocio, el frontend y Docker Compose todavía no están implementados.
+El repositorio contiene la estructura base de un monorepo modular. Los seis módulos backend tienen esqueletos Maven y clases de inicio; sus funcionalidades de negocio y el frontend todavía no están implementados. Docker Compose proporciona PostgreSQL, RabbitMQ y Keycloak para desarrollo local.
 
 ```
 commercehub/
 ├── docs/                     # Documentación técnica, funcional, ADRs y contratos
 ├── frontend/                 # Directorio base previsto para la SPA (React + TypeScript)
 ├── infrastructure/           # Configuración de infraestructura y despliegue
-│   ├── docker/               # Directorio base previsto para Docker Compose
+│   ├── docker/               # Docker Compose para infraestructura local
 │   ├── monitoring/           # Directorio base previsto para observabilidad
 │   └── terraform/            # Directorio base previsto para infraestructura como código
 ├── scripts/                  # Scripts de inicialización, seeds y utilidades
@@ -54,7 +54,7 @@ commercehub/
 ## 3. Stack Tecnológico Aprobado
 
 > [!NOTE]
-> Las siguientes tecnologías y herramientas corresponden a las **decisiones arquitectónicas aprobadas** (ver [ADRs](docs/adr/)). En esta fase, el backend cuenta con esqueletos de compilación; sus funcionalidades de negocio, el frontend y la orquestación local con Docker Compose todavía no están implementados.
+> Las siguientes tecnologías y herramientas corresponden a las **decisiones arquitectónicas aprobadas** (ver [ADRs](docs/adr/)). En esta fase, el backend cuenta con esqueletos de compilación; sus funcionalidades de negocio y el frontend todavía no están implementados.
 
 | Componente | Tecnología o patrón aprobado | Alcance previsto |
 | :--- | :--- | :--- |
@@ -62,13 +62,13 @@ commercehub/
 | **Framework backend** | **Spring Boot** | Base prevista para los servicios backend. |
 | **Borde / Perímetro** | **Spring Cloud Gateway** | Gateway reactivo y validación JWT como objetivos de arquitectura. |
 | **Servicios de negocio** | **Spring MVC + Spring Data JPA** | Stack imperativo aprobado para servicios transaccionales. |
-| **Persistencia** | **PostgreSQL / Neon** y patrón **Database-per-Service** | Persistencia aislada por servicio, aún no implementada. |
+| **Persistencia** | **PostgreSQL / Neon** y patrón **Database-per-Service** | Bases locales aisladas preparadas para cada servicio. |
 | **Migración de esquemas** | **Flyway** | Migraciones versionadas previstas. |
-| **Mensajería asíncrona** | **RabbitMQ**, Outbox y DLQ | Patrones aprobados para eventos; no hay broker ni integración implementados. |
-| **Gestión de identidad** | **Keycloak (OIDC / OAuth2)** | Integración y roles `CUSTOMER` y `ADMIN` previstos. |
+| **Mensajería asíncrona** | **RabbitMQ**, Outbox y DLQ | Broker local disponible; la topología de negocio no está declarada. |
+| **Gestión de identidad** | **Keycloak (OIDC / OAuth2)** | Servidor local disponible; los servicios aún no están integrados. |
 | **Frontend** | **React + TypeScript** | SPA prevista; no implementada. |
 | **Testing** | **JUnit 5, Mockito, Testcontainers** | Herramientas aprobadas; no hay pruebas ni dependencias de aplicación incorporadas. |
-| **Entorno local** | **Docker Compose** | Orquestación prevista; no implementada. |
+| **Entorno local** | **Docker Compose** | PostgreSQL, RabbitMQ y Keycloak. |
 
 ---
 
@@ -107,7 +107,28 @@ cp .env.example .env
 > [!CAUTION]
 > NUNCA incorpores contraseñas productivas, llaves privadas ni credenciales reales en el archivo `.env`. El archivo `.env` se encuentra ignorado por Git.
 
-### 5.3 Estado del Proyecto: Funcionalidades Implementadas vs. Pendientes
+### 5.3 Iniciar la infraestructura local
+
+Crear `.env` desde la plantilla y levantar los servicios:
+
+```bash
+cp .env.example .env
+docker compose -f infrastructure/docker/docker-compose.yml config
+docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f infrastructure/docker/docker-compose.yml ps
+```
+
+PostgreSQL estará disponible en `localhost:5432`, RabbitMQ AMQP en `localhost:5672` y su consola en <http://localhost:15672>. Keycloak estará en <http://localhost:8180>. Las credenciales de desarrollo se leen desde `.env`; reemplázalas para cualquier entorno compartido.
+
+Para detener los contenedores conservando los datos:
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml down
+```
+
+Para borrar también los volúmenes persistentes (incluidas las bases locales), usa `docker compose -f infrastructure/docker/docker-compose.yml down -v`.
+
+### 5.4 Estado del Proyecto: Funcionalidades Implementadas vs. Pendientes
 
 Actualmente, lo **implementado** en el repositorio se limita a la **estructura base y documentación del monorepo**:
 - Estructura modular de directorios para microservicios, frontend, infraestructura y scripts.
@@ -120,7 +141,7 @@ Actualmente, lo **implementado** en el repositorio se limita a la **estructura b
 > **Componentes aún pendientes:**
 > - **Microservicios backend (`services/*`):** `api-gateway`, `catalog-service`, `inventory-service`, `notification-service`, `order-service` y `payment-service` cuentan con esqueletos Maven y clases de inicio compilables. Las funcionalidades de negocio aún no están implementadas y se desarrollarán en las Issues dedicadas a cada dominio.
 > - **Frontend (`frontend/`):** La aplicación cliente (React + TypeScript) **no está implementada** ni inicializada todavía.
-> - **Orquestación local (`infrastructure/docker/`):** Los manifiestos de Docker Compose **no están implementados todavía**. **No intentes ejecutar `docker compose up`** ni comandos de arranque de servicios en esta fase.
+> - **Integración de aplicaciones:** Los microservicios Java no se incluyen en el Compose y todavía no se conectan a la infraestructura local.
 
 ---
 
