@@ -1,6 +1,6 @@
 # CommerceHub
 
-**CommerceHub** es un proyecto de plataforma de comercio electrónico monocomercio (*single-merchant*). Su arquitectura objetivo se basa en microservicios desacoplados y patrones de consistencia eventual. Actualmente, el repositorio contiene la estructura inicial y documentación del proyecto; las funcionalidades de la plataforma aún no están implementadas.
+**CommerceHub** es un proyecto de plataforma de comercio electrónico monocomercio (*single-merchant*). Su arquitectura objetivo se basa en microservicios desacoplados y patrones de consistencia eventual. Actualmente, `catalog-service` cuenta con su modelo de dominio y persistencia inicial; el resto de las funcionalidades de la plataforma aún está en desarrollo.
 
 ---
 
@@ -24,7 +24,7 @@ Como objetivos funcionales previstos —aún no implementados—, CommerceHub pe
 
 ## 2. Estructura del Monorepo
 
-El repositorio contiene la estructura base de un monorepo modular. Los seis módulos backend tienen esqueletos Maven y clases de inicio; sus funcionalidades de negocio y el frontend todavía no están implementados. Docker Compose proporciona PostgreSQL, RabbitMQ y Keycloak para desarrollo local.
+El repositorio contiene un monorepo modular. Los módulos backend tienen estructura Maven y clases de inicio; `catalog-service` además implementa el modelo y la persistencia inicial del catálogo. Las APIs del catálogo, el resto de funcionalidades de negocio y el frontend todavía no están implementados. Docker Compose proporciona PostgreSQL, RabbitMQ y Keycloak para desarrollo local.
 
 ```
 commercehub/
@@ -54,27 +54,28 @@ commercehub/
 ## 3. Stack Tecnológico Aprobado
 
 > [!NOTE]
-> Las siguientes tecnologías y herramientas corresponden a las **decisiones arquitectónicas aprobadas** (ver [ADRs](docs/adr/)). En esta fase, el backend cuenta con esqueletos de compilación; sus funcionalidades de negocio y el frontend todavía no están implementados.
+> Las siguientes tecnologías y herramientas corresponden a las **decisiones arquitectónicas aprobadas** (ver [ADRs](docs/adr/)). El backend está en desarrollo; el estado implementado del catálogo se limita a su modelo y persistencia inicial, sin endpoints REST.
 
 | Componente | Tecnología o patrón aprobado | Alcance previsto |
 | :--- | :--- | :--- |
 | **Lenguaje base** | **Java 25 (LTS)** | Versión aprobada y configurada para compilar los servicios backend. |
 | **Framework backend** | **Spring Boot** | Base prevista para los servicios backend. |
 | **Borde / Perímetro** | **Spring Cloud Gateway** | Gateway reactivo y validación JWT como objetivos de arquitectura. |
-| **Servicios de negocio** | **Spring MVC + Spring Data JPA** | Stack imperativo aprobado para servicios transaccionales. |
-| **Persistencia** | **PostgreSQL / Neon** y patrón **Database-per-Service** | Bases locales aisladas preparadas para cada servicio. |
-| **Migración de esquemas** | **Flyway** | Migraciones versionadas previstas. |
+| **Servicios de negocio** | **Spring MVC + Spring Data JPA** | Stack imperativo aprobado; el catálogo ya tiene su modelo persistente inicial. |
+| **Persistencia** | **PostgreSQL / Neon** y patrón **Database-per-Service** | `catalog-service` persiste su modelo en su propia base PostgreSQL. |
+| **Migración de esquemas** | **Flyway** | La migración inicial del catálogo está implementada; se versiona por servicio. |
+| **Reducción de código Java** | **Lombok** | Dependencia y procesamiento de anotaciones configurados solo en `catalog-service`. |
 | **Mensajería asíncrona** | **RabbitMQ**, Outbox y DLQ | Broker local disponible; la topología de negocio no está declarada. |
 | **Gestión de identidad** | **Keycloak (OIDC / OAuth2)** | Servidor local disponible; los servicios aún no están integrados. |
 | **Frontend** | **React + TypeScript** | SPA prevista; no implementada. |
-| **Testing** | **JUnit 5, Mockito, Testcontainers** | Herramientas aprobadas; no hay pruebas ni dependencias de aplicación incorporadas. |
+| **Testing** | **JUnit 5, Mockito, Testcontainers** | Pruebas unitarias del dominio e integración PostgreSQL implementadas en `catalog-service`. |
 | **Entorno local** | **Docker Compose** | PostgreSQL, RabbitMQ y Keycloak. |
 
 ---
 
 ## 4. Requisitos Previos del Entorno
 
-El repositorio en su estado actual solo requiere Git. JDK 25, Node.js y Docker/Compose serán necesarios en las fases en que se implementen los componentes correspondientes:
+Para compilar el backend se requiere JDK 25. Las pruebas de integración de `catalog-service` usan Testcontainers y requieren Docker. Maven se ejecuta mediante el wrapper incluido; Node.js se requiere al trabajar en el frontend y Docker Compose al levantar toda la infraestructura local.
 
 1. **Java Development Kit (JDK) 25** (Versión LTS)
    - Verificar con: `java -version`

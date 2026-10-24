@@ -96,6 +96,15 @@ Cada microservicio en `services/` mantiene autonomía funcional y toma como base
 - **Excepciones:** `PascalCase` con sufijo `Exception` (`ResourceNotFoundException`, `InsufficientStockException`).
 - **Tests:** Clase bajo prueba + `Test` para unitarios (`OrderServiceTest.java`) o + `IT` para integración (`OrderRepositoryIT.java`).
 
+#### Uso de Lombok
+
+- **Propósito:** reducir código repetitivo de acceso a datos y otros elementos mecánicos sin ocultar invariantes ni comportamiento del dominio. Actualmente se usa en `catalog-service`.
+- **Maven y procesamiento:** la dependencia `org.projectlombok:lombok` se declara con alcance `provided` en el módulo que la usa, y también se configura explícitamente como annotation processor en `maven-compiler-plugin`. Con Java 25, el procesamiento explícito es necesario. La configuración del catálogo conserva su versión en el POM del módulo; no se centraliza en el POM raíz mientras no haya más módulos que la necesiten.
+- **Anotaciones permitidas con criterio:** `@Getter` para getters simples; `@RequiredArgsConstructor` para dependencias `final` en servicios o componentes sin lógica de construcción; `@Slf4j` cuando la clase necesita logging. Usar solo las anotaciones que eliminen repetición clara.
+- **Constructores e invariantes:** mantener constructores explícitos en el dominio cuando validen o establezcan invariantes. Los constructores requeridos por JPA deben conservar acceso protegido o de paquete y no sustituir el constructor de dominio.
+- **Getters y setters:** se permiten getters generados. Evitar setters generados en entidades de dominio; las modificaciones deben expresarse con métodos de intención como `changePrice()`, `publish()` o `unpublish()` para conservar validaciones.
+- **Entidades JPA:** no usar `@Data` indiscriminadamente. Evitar `@EqualsAndHashCode` y `@ToString` generados sobre todas las propiedades, en especial asociaciones, proxies y relaciones bidireccionales. No generar igualdad basada en todas las propiedades de una entidad persistente sin una decisión explícita sobre identidad.
+
 ### 3.2 Base de Datos (PostgreSQL)
 - **Nombres de Tablas:** Minúsculas en `snake_case`, preferentemente en plural (`orders`, `order_items`, `products`, `saga_instances`, `outbox_events`).
 - **Columnas:** Minúsculas en `snake_case` (`id`, `order_id`, `unit_price`, `idempotency_key`, `created_at`).
@@ -175,7 +184,10 @@ Ejemplos:
 ## 6. Convenciones de Testing y Calidad
 
 - **Versión de Lenguaje:** **Java 25**. No se permite degradar la versión del compilador ni el bytecode a versiones previas.
-- **Pruebas Unitarias:** Construidas con **JUnit 5** y **Mockito**. Se ejecutan en memoria de forma aislada, rápida y determinista.
-- **Pruebas de Integración:** Emplean **Testcontainers** para levantar contenedores efímeros reales de PostgreSQL y RabbitMQ, asegurando que las migraciones Flyway y los contratos de mensajería se ejecuten de forma fidedigna.
+- **JUnit 5:** Es el framework de estructura y ejecución de pruebas automatizadas. Las pruebas unitarias deben ser pequeñas y deterministas; las pruebas de integración deben identificar claramente la infraestructura real que requieren.
+- **Mockito:** Se utiliza en pruebas unitarias para simular dependencias externas o colaboradores cuando sea necesario aislar la unidad bajo prueba. No se deben agregar mocks sin una dependencia que convenga aislar.
+- **Testcontainers:** Se utiliza en pruebas de integración que necesitan infraestructura real, como PostgreSQL o RabbitMQ, mediante contenedores efímeros. En particular, la persistencia, las migraciones Flyway, las consultas y las restricciones de base de datos deben probarse contra PostgreSQL real.
+- **Límite entre pruebas:** Mockito no sustituye una prueba de integración que debe validar el comportamiento real de PostgreSQL (por ejemplo, claves foráneas, índices, restricciones o DDL de Flyway). Los mocks no ejecutan ni verifican esas funciones del motor.
+- **Ejecución del módulo de catálogo:** `./mvnw -pl services/catalog-service test` ejecuta las pruebas unitarias y de integración del módulo; para estas últimas se requiere un entorno Docker compatible con Testcontainers.
 - **Concurrencia en Servicios Spring MVC (Virtual Threads):** Conforme a lo aprobado en el [ADR-005](file:///home/samuel/01_Proyectos/commercehub/docs/adr/ADR-005-spring-mvc.md), los microservicios de negocio imperativos basados en Spring MVC (`catalog-service`, `inventory-service`, `order-service` y `payment-service`) deben aprovechar el soporte nativo de Virtual Threads de Java 25 configurando `spring.threads.virtual.enabled=true`. Esta directriz aplica a los servicios de negocio indicados en el ADR y no se impone a componentes reactivos como `api-gateway` (basado en Spring Cloud Gateway / Netty) ni a otros módulos donde no esté contemplada en las decisiones arquitectónicas.
 - **Idempotencia:** Toda operación de cobro o mutación de orden debe ser verificada bajo escenarios de duplicación de peticiones utilizando la clave `Idempotency-Key`.
