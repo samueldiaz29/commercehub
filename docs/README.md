@@ -36,7 +36,7 @@ docs/
 │   ├── reglas-transversales.md                # Reglas de negocio globales, políticas e invariantes
 │   └── estados-y-transiciones.md              # Máquinas de estado: Pedido, Pago, Reserva, Reembolso
 ├── architecture/
-│   ├── arquitectura.md                        # Vista de arquitectura C4, límites de contexto y patrones
+│   ├── arquitectura.md                        # Vista C4, límites de contexto y persistencia implementada del catálogo
 │   └── saga-checkout.md                       # Especificación detallada de la Saga de Checkout
 ├── api/
 │   ├── contratos.md                           # Especificación de contratos REST, headers y códigos HTTP
@@ -60,11 +60,12 @@ docs/
 | **Framework Base** | Spring Boot | Ecosistema empresarial maduro, integración nativa de dependencias. |
 | **API Gateway** | Spring Cloud Gateway | Enrutamiento perimetral, gestión reactiva de tráfico de entrada y CORS. |
 | **Servicios de Negocio** | Spring MVC + Spring Data JPA / Hibernate | Modelo imperativo claro, transaccionalidad local robusta y mapeo ORM. |
+| **Reducción de código Java** | Lombok (por módulo) | Procesamiento de anotaciones en compilación; actualmente limitado a `catalog-service`. |
 | **Persistencia** | PostgreSQL / Neon | Integridad referencial ACID por servicio, soporte JSONB y escalabilidad. |
 | **Migración de Esquemas** | Flyway | Versionado reproducible de DDL en cada base de datos. |
 | **Mensajería Asíncrona** | RabbitMQ | Enrutamiento flexible AMQP (Direct/Topic), Dead Lettering y bajo consumo de recursos. |
 | **Gestión de Identidad (IAM)** | Keycloak (OIDC / OAuth2) | Centralización de usuarios, emisión de JWT y RBAC desacoplado. |
-| **Testing** | JUnit 5, Mockito, Testcontainers | Pruebas unitarias aisladas e integración real con contenedores efímeros. |
+| **Testing** | JUnit 5, Mockito, Testcontainers | Pruebas unitarias e integración con PostgreSQL real en `catalog-service`; estrategia aplicable a los demás servicios. |
 | **Frontend** | React + TypeScript | SPA desacoplada consumiendo las APIs a través del Gateway. |
 | **Automatización y Despliegue** | Docker Compose + GitHub Actions | Orquestación local multicontenedor e integración continua (CI/CD). |
 

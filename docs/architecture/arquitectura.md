@@ -86,6 +86,24 @@ flowchart TB
   - Operaciones de mutación (alta, edición, baja lógica) restringidas exclusivamente a usuarios con rol `ADMIN`.
   - **No gestiona inventario en tiempo real ni transacciones de compra.**
 
+#### Persistencia actualmente implementada — Issue #4
+
+La persistencia pertenece exclusivamente a `catalog-service` y se conecta a `catalog_db`. Spring Data JPA/Hibernate administra las entidades; Flyway aplica las migraciones y Hibernate valida el esquema al iniciar (`ddl-auto=validate`). La migración inicial se encuentra en `services/catalog-service/src/main/resources/db/migration/V1__init_catalog_schema.sql`.
+
+- `Category` se persiste en `categories`, con identificador `BIGINT` generado por identidad, nombre requerido (`VARCHAR(120)`) y descripción opcional (`VARCHAR(500)`). No hay unicidad definida para nombres de categoría.
+- `Product` se persiste en `products`, con identificador `BIGINT` generado por identidad, SKU requerido (`VARCHAR(64)`), nombre requerido (`VARCHAR(200)`), descripción opcional (`VARCHAR(2000)`), categoría, precio, moneda, URL de imagen opcional (`VARCHAR(2048)`) y estado `published` (por defecto `false` en la base de datos).
+- `@Getter` de Lombok genera únicamente los getters de estas entidades. Los constructores que validan el dominio y los métodos de cambio de precio/publicación siguen explícitos; no se generan setters, `equals`, `hashCode` ni `toString` para las entidades.
+- `Currency` es un enum persistido como texto en `VARCHAR(3)`. Actualmente solo admite `PEN`, conforme a la moneda base aprobada; la base de datos también usa PEN como valor predeterminado y lo restringe con un check.
+- Los precios usan `BigDecimal` y `NUMERIC(19,2)`: se eligieron 17 dígitos enteros más dos decimales para representar importes PEN exactos dentro de un rango amplio. El dominio rechaza importes nulos, no positivos, con más de dos decimales efectivos o fuera de ese rango; la base de datos también impone `price > 0`.
+- El dominio exige texto no vacío para el SKU y el nombre del producto y el nombre de categoría. La base de datos refuerza esos campos con `NOT NULL` y checks que rechazan cadenas en blanco.
+- `uk_products_sku` garantiza unicidad del SKU. No se aplica normalización en la aplicación. La restricción de PostgreSQL compara los valores respetando mayúsculas/minúsculas; esa es la semántica técnica actual, no una política comercial confirmada.
+- `fk_products_categories` exige que la categoría exista y restringe su eliminación mientras tenga productos asociados. Los índices `idx_products_category_id` e `idx_products_published` cubren filtros por categoría y publicación.
+- La conexión requiere `CATALOG_DB_URL`, `CATALOG_DB_USERNAME` y `CATALOG_DB_PASSWORD`. No se definen credenciales en el código. Flyway es la fuente de cambios del esquema; Hibernate no crea ni actualiza tablas.
+
+#### Pendiente de implementación
+
+La historia de usuario y los contratos describen capacidades de consulta pública y gestión administrativa, pero sus endpoints, autorización, búsqueda, paginación y operaciones de categorías aún no están implementados. Tampoco se incluyen inventario, marcas ni historial de precios en el modelo de esta Issue. La sensibilidad del SKU a mayúsculas/minúsculas sigue pendiente de decisión de negocio; cualquier cambio de normalización requiere resolver esa política primero.
+
 ### 2.3 Inventory Service (`inventory-service`) `[DECISIÓN APROBADA]`
 - **Tecnología:** Java 25, Spring Boot, Spring MVC, Spring Data JPA, Flyway, PostgreSQL.
 - **Límites de Responsabilidad:**
