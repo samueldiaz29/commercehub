@@ -35,20 +35,22 @@ Todas las respuestas con código de error (HTTP 4xx / 5xx) utilizarán el esquem
 
 ### 2.1 Catalog Service (`catalog-service`)
 
-#### `GET /api/v1/products` `[PROPUESTA PENDIENTE]`
-- **Propósito:** Consulta pública de productos activos.
+#### `GET /api/v1/products`
+- **Propósito:** Consulta pública paginada de productos publicados (`published = true`).
 - **Acceso:** Público (anónimo / autenticado).
-- **Parámetros de consulta (Query Params):** `page`, `size`, `category_id`, `search`.
+- **Parámetros de consulta (Query Params):** `page` (base cero, predeterminado `0`), `size` (predeterminado `20`, mínimo `1`), `category_id` (opcional, ID numérico de categoría), `search` (opcional, coincidencia parcial sin distinguir mayúsculas/minúsculas en el nombre).
+- **Orden:** nombre ascendente y, para desempate estable, ID ascendente. No se acepta un parámetro de ordenamiento.
+- **Identificadores:** numéricos `BIGINT`, como define el esquema persistente del catálogo.
 - **Respuesta Exitosa (HTTP 200 OK):**
 ```json
 {
   "content": [
     {
-      "id": "prod-e3b0c442-98fc-1c14-9afbf4c8996f",
+      "id": 1,
       "sku": "LAP-MAC-14M3",
       "name": "Laptop Pro 14",
       "description": "Chip M3, 16GB RAM, 512GB SSD",
-      "category": { "id": "cat-01", "name": "Laptops" },
+      "category": { "id": 1, "name": "Laptops" },
       "price": 6499.00,
       "currency": "PEN",
       "image_url": "https://assets.commercehub.local/products/mac14.webp",
@@ -61,6 +63,21 @@ Todas las respuestas con código de error (HTTP 4xx / 5xx) utilizarán el esquem
   "total_pages": 1
 }
 ```
+
+#### `GET /api/v1/products/{id}`
+- **Propósito:** Obtener el detalle de un producto publicado.
+- **Acceso:** Público (anónimo / autenticado).
+- **Respuesta exitosa (HTTP 200 OK):** El mismo DTO de producto incluido en `content` del listado.
+- **Producto inexistente o no publicado (HTTP 404 Not Found):** Problem Details. Ambos casos tienen la misma respuesta para no revelar productos ocultos.
+
+#### `GET /api/v1/categories`
+- **Propósito:** Consultar las categorías que contienen al menos un producto publicado.
+- **Acceso:** Público (anónimo / autenticado).
+- **Respuesta exitosa (HTTP 200 OK):** Arreglo ordenado por nombre ascendente y luego ID ascendente, con elementos `{ "id": 1, "name": "Laptops" }`.
+
+#### Errores de consulta del catálogo
+- Parámetros inválidos o `page < 0` / `size < 1`: HTTP `400 Bad Request` con Problem Details.
+- `X-Correlation-Id`, cuando se recibe, se devuelve como `correlation_id`; todas las respuestas de error incluyen `type`, `title`, `status`, `detail`, `instance` y `timestamp`.
 
 #### `POST /api/v1/admin/products` `[PROPUESTA PENDIENTE]`
 - **Propósito:** Creación de un producto en el catálogo.

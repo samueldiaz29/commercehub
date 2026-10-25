@@ -100,9 +100,9 @@ La persistencia pertenece exclusivamente a `catalog-service` y se conecta a `cat
 - `fk_products_categories` exige que la categoría exista y restringe su eliminación mientras tenga productos asociados. Los índices `idx_products_category_id` e `idx_products_published` cubren filtros por categoría y publicación.
 - La conexión requiere `CATALOG_DB_URL`, `CATALOG_DB_USERNAME` y `CATALOG_DB_PASSWORD`. No se definen credenciales en el código. Flyway es la fuente de cambios del esquema; Hibernate no crea ni actualiza tablas.
 
-#### Pendiente de implementación
+#### Consulta pública y alcance pendiente
 
-La historia de usuario y los contratos describen capacidades de consulta pública y gestión administrativa, pero sus endpoints, autorización, búsqueda, paginación y operaciones de categorías aún no están implementados. Tampoco se incluyen inventario, marcas ni historial de precios en el modelo de esta Issue. La sensibilidad del SKU a mayúsculas/minúsculas sigue pendiente de decisión de negocio; cualquier cambio de normalización requiere resolver esa política primero.
+Issue #5 implementa la consulta pública con `GET /api/v1/products`, `GET /api/v1/products/{id}` y `GET /api/v1/categories`. Las búsquedas y el detalle solo incluyen productos publicados; el listado filtra por categoría y coincidencia parcial en nombre, pagina en PostgreSQL y ordena por nombre e ID ascendente. Las categorías públicas son las que tienen al menos un producto publicado. Los DTO HTTP mantienen los IDs numéricos `BIGINT` del esquema y las respuestas de error usan Problem Details. La gestión administrativa, autorización de mutaciones, inventario, marcas e historial de precios no forman parte de esta API. La sensibilidad del SKU a mayúsculas/minúsculas sigue pendiente de decisión de negocio; cualquier cambio de normalización requiere resolver esa política primero.
 
 ### 2.3 Inventory Service (`inventory-service`) `[DECISIÓN APROBADA]`
 - **Tecnología:** Java 25, Spring Boot, Spring MVC, Spring Data JPA, Flyway, PostgreSQL.
