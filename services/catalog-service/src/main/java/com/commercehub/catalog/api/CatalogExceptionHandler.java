@@ -1,6 +1,8 @@
 package com.commercehub.catalog.api;
 
 import com.commercehub.catalog.application.ProductNotFoundException;
+import com.commercehub.catalog.application.CategoryNotFoundException;
+import com.commercehub.catalog.application.ProductConflictException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -18,6 +20,16 @@ public class CatalogExceptionHandler {
     @ExceptionHandler(ProductNotFoundException.class)
     ProblemDetail productNotFound(ProductNotFoundException exception, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "product-not-found", "Producto no encontrado", exception, request);
+    }
+
+    @ExceptionHandler(CategoryNotFoundException.class)
+    ProblemDetail categoryNotFound(CategoryNotFoundException exception, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "category-not-found", "Categoría no encontrada", exception, request);
+    }
+
+    @ExceptionHandler(ProductConflictException.class)
+    ProblemDetail productConflict(ProductConflictException exception, HttpServletRequest request) {
+        return problem(HttpStatus.CONFLICT, "product-conflict", "Conflicto de producto", exception, request);
     }
 
     @ExceptionHandler({IllegalArgumentException.class, MethodArgumentTypeMismatchException.class,
