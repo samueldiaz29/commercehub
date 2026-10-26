@@ -74,6 +74,20 @@ public class Product {
         this.price = requireValidPrice(price);
     }
 
+    public void updateDetails(String sku, String name, String description, Category category,
+                              BigDecimal price, String imageUrl) {
+        String validSku = requireText(sku, "sku");
+        String validName = requireText(name, "name");
+        Category validCategory = Objects.requireNonNull(category, "category must not be null");
+        BigDecimal validPrice = requireValidPrice(price);
+        this.sku = validSku;
+        this.name = validName;
+        this.category = validCategory;
+        this.price = validPrice;
+        this.description = description;
+        this.imageUrl = imageUrl;
+    }
+
     public void publish() {
         this.published = true;
     }

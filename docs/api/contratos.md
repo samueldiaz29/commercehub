@@ -79,22 +79,45 @@ Todas las respuestas con código de error (HTTP 4xx / 5xx) utilizarán el esquem
 - Parámetros inválidos o `page < 0` / `size < 1`: HTTP `400 Bad Request` con Problem Details.
 - `X-Correlation-Id`, cuando se recibe, se devuelve como `correlation_id`; todas las respuestas de error incluyen `type`, `title`, `status`, `detail`, `instance` y `timestamp`.
 
-#### `POST /api/v1/admin/products` `[PROPUESTA PENDIENTE]`
-- **Propósito:** Creación de un producto en el catálogo.
-- **Acceso:** Restringido a rol `ADMIN`.
+#### `POST /api/v1/admin/products`
+- **Propósito:** Crear un producto en el catálogo.
+- **Acceso:** JWT válido emitido por el issuer Keycloak configurado y rol `ADMIN` en `realm_access.roles`. Los roles se autorizan en el servidor.
 - **Cuerpo de Petición (Request Body):**
 ```json
 {
   "sku": "AUD-SONY-WH1000",
   "name": "Audífonos Inalámbricos Noise Cancelling",
   "description": "Cancelación de ruido activa, batería 30h",
-  "category_id": "cat-audio",
+  "category_id": 3,
   "price": 1299.00,
   "currency": "PEN",
-  "image_url": "https://assets.commercehub.local/products/sony-wh.webp"
+  "image_url": "https://assets.commercehub.local/products/sony-wh.webp",
+  "published": true
 }
 ```
-- **Respuesta (HTTP 201 Created):** Retorna el producto creado con su identificador generado.
+- `sku` y `name` son obligatorios y no pueden estar en blanco; sus longitudes máximas son 64 y 200. `category_id` debe ser el ID numérico de una categoría existente. `price` debe ser positivo y caber en `NUMERIC(19,2)`. La moneda admitida es `PEN`. `description` y `image_url` son opcionales y se limitan a las longitudes del esquema. `published` es opcional y su valor predeterminado es `false`.
+- **Respuesta (HTTP 201 Created):** Retorna el DTO de producto documentado para consultas, con `Location` apuntando a `/api/v1/admin/products/{id}`.
+- SKU duplicado (incluidas colisiones detectadas al persistir): HTTP `409 Conflict` con Problem Details. Categoría inexistente: HTTP `404 Not Found`. Cuerpo inválido o precio no permitido: HTTP `400 Bad Request` con Problem Details.
+- Usuario anónimo: HTTP `401 Unauthorized`. Usuario autenticado sin rol `ADMIN` (incluido `CUSTOMER`): HTTP `403 Forbidden`.
+
+#### `PUT /api/v1/admin/products/{id}`
+- **Propósito:** Actualizar los campos comerciales editables de un producto existente.
+- **Acceso:** JWT válido del issuer configurado y rol `ADMIN` en `realm_access.roles`.
+- **Request Body:** Mismos campos que la creación excepto `published`: `sku`, `name`, `description`, `category_id`, `price`, `currency` y `image_url`. SKU, nombre, categoría, precio y moneda son obligatorios; `description` e `image_url` son opcionales. Las reglas de longitud, SKU único, categoría existente y precio PEN son iguales a `POST`.
+- **Campos administrados por el sistema:** El DTO no expone `id` ni `published`; el identificador nunca se toma del cuerpo y la actualización conserva el estado de publicación actual. La moneda admitida sigue siendo únicamente `PEN`.
+- **Respuesta (HTTP 200 OK):** DTO completo de producto (`ProductResponse`) con los datos actualizados.
+- Producto inexistente: `404 Not Found`; categoría inexistente: `404 Not Found`; SKU ocupado por otro producto: `409 Conflict`; cuerpo inválido: `400 Bad Request`. Los errores usan Problem Details.
+
+#### `PATCH /api/v1/admin/products/{id}`
+- **Propósito:** Deshabilitar un producto mediante baja lógica.
+- **Acceso:** JWT válido del issuer configurado y rol `ADMIN` en `realm_access.roles`.
+- **Request Body:** `{ "published": false }`. El cuerpo es obligatorio y no se acepta `true` en esta operación.
+- **Respuesta (HTTP 200 OK):** DTO del producto con `published: false`. La operación es idempotente: repetirla sobre el mismo producto devuelve `200` y mantiene el producto deshabilitado.
+- Producto inexistente: `404 Not Found`; cuerpo inválido o `published` distinto de `false`: `400 Bad Request`, ambos con Problem Details.
+- La deshabilitación persiste `published = false` sin borrar el producto ni alterar carritos u órdenes. Desde el commit de la operación el producto queda excluido del listado, las búsquedas y el detalle público; su detalle responde `404` como cualquier producto no publicado.
+
+#### Administración independiente de categorías
+- HU-CAT-02 solo menciona gestionar categorías en el objetivo general y la categorización de productos; no define criterios para crear, editar, deshabilitar o eliminar categorías. El contrato existente únicamente define `GET /api/v1/categories` público. No se agrega CRUD administrativo de categorías ni una política de eliminación. `POST` y `PUT` de productos requieren `category_id` correspondiente a una categoría existente.
 
 ---
 

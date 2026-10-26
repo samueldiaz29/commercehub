@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -23,9 +24,15 @@ import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.core.authority.AuthorityUtils.createAuthorityList;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -124,6 +131,177 @@ class CatalogQueryIntegrationTest {
         mockMvc.perform(get("/api/v1/products").param("page", "-1"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void adminCanCreateProductAndItAppearsInPublicCatalog() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Audio", null));
+        String request = """
+                {"sku":"ADMIN-1","name":"Admin headphones","description":"Wireless",
+                 "category_id":%d,"price":49.90,"currency":"PEN","published":true}
+                """.formatted(category.getId());
+
+        mockMvc.perform(post("/api/v1/admin/products")
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN")))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sku").value("ADMIN-1"))
+                .andExpect(jsonPath("$.currency").value("PEN"))
+                .andExpect(jsonPath("$.published").value(true));
+
+        mockMvc.perform(get("/api/v1/products").param("search", "Admin headphones"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].sku").value("ADMIN-1"));
+    }
+
+    @Test
+    void adminCreationRejectsDuplicateSkuAndMissingCategory() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Audio", null));
+        productRepository.saveAndFlush(product("ADMIN-DUP", "Existing", category, false));
+        String duplicate = """
+                {"sku":"ADMIN-DUP","name":"Duplicate","category_id":%d,
+                 "price":10.00,"currency":"PEN"}
+                """.formatted(category.getId());
+        mockMvc.perform(post("/api/v1/admin/products")
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(duplicate))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://commercehub.local/errors/product-conflict"));
+
+        String missingCategory = """
+                {"sku":"ADMIN-NO-CATEGORY","name":"Missing category","category_id":999999,
+                 "price":10.00,"currency":"PEN"}
+                """;
+        mockMvc.perform(post("/api/v1/admin/products")
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(missingCategory))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("https://commercehub.local/errors/category-not-found"));
+    }
+
+    @Test
+    void adminUpdatePersistsEditableFieldsAndKeepsPublicationState() throws Exception {
+        Category oldCategory = categoryRepository.saveAndFlush(new Category("Old category", null));
+        Category newCategory = categoryRepository.saveAndFlush(new Category("New category", null));
+        Product product = productRepository.saveAndFlush(product("UPDATE-1", "Original", oldCategory, true));
+        String request = """
+                {"sku":"UPDATE-2","name":"Updated product","description":"Updated description",
+                 "category_id":%d,"price":65.25,"currency":"PEN","image_url":"https://example.test/new.webp"}
+                """.formatted(newCategory.getId());
+
+        mockMvc.perform(put("/api/v1/admin/products/{id}", product.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("UPDATE-2"))
+                .andExpect(jsonPath("$.category.name").value("New category"))
+                .andExpect(jsonPath("$.price").value(65.25))
+                .andExpect(jsonPath("$.published").value(true));
+
+        Product persisted = productRepository.findById(product.getId()).orElseThrow();
+        assertThat(persisted.getName()).isEqualTo("Updated product");
+        assertThat(persisted.getCategory().getId()).isEqualTo(newCategory.getId());
+        assertThat(persisted.getPrice()).isEqualByComparingTo("65.25");
+    }
+
+    @Test
+    void adminDisablePersistsAndImmediatelyHidesProductFromSearchAndDetailIdempotently() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Audio", null));
+        Product product = productRepository.saveAndFlush(product("DISABLE-1", "Disable me", category, true));
+        String request = "{\"published\":false}";
+
+        mockMvc.perform(patch("/api/v1/admin/products/{id}", product.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.published").value(false));
+        mockMvc.perform(patch("/api/v1/admin/products/{id}", product.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.published").value(false));
+
+        assertThat(productRepository.findById(product.getId()).orElseThrow().isPublished()).isFalse();
+        mockMvc.perform(get("/api/v1/products").param("search", "Disable me"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total_elements").value(0));
+        mockMvc.perform(get("/api/v1/products/{id}", product.getId())).andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/categories")).andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void adminUpdateRejectsSkuOwnedByAnotherProductWithoutChangingEitherProduct() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Audio", null));
+        Product first = productRepository.saveAndFlush(product("FIRST-SKU", "First", category, true));
+        productRepository.saveAndFlush(product("TAKEN-SKU", "Second", category, true));
+        String update = """
+                {"sku":"TAKEN-SKU","name":"Changed","category_id":%d,
+                 "price":20.00,"currency":"PEN"}
+                """.formatted(category.getId());
+
+        mockMvc.perform(put("/api/v1/admin/products/{id}", first.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isConflict());
+
+        assertThat(productRepository.findById(first.getId()).orElseThrow().getSku()).isEqualTo("FIRST-SKU");
+        assertThat(productRepository.findBySku("TAKEN-SKU")).isPresent();
+    }
+
+    @Test
+    void rejectsCustomerAndAnonymousAdministrativeRequestsButKeepsPublicApiOpen() throws Exception {
+        String request = """
+                {"sku":"SEC-1","name":"Security product","category_id":1,
+                 "price":10.00,"currency":"PEN"}
+                """;
+
+        mockMvc.perform(post("/api/v1/admin/products")
+                        .with(jwt().authorities(createAuthorityList("ROLE_CUSTOMER")))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/products").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/products")).andExpect(status().isOk());
+    }
+
+    @Test
+    void onlyAdminCanUpdateOrDisableProducts() throws Exception {
+        Category category = categoryRepository.saveAndFlush(new Category("Audio", null));
+        Product product = productRepository.saveAndFlush(product("SEC-2", "Security product", category, true));
+        String update = """
+                {"sku":"SEC-3","name":"Security product updated","category_id":%d,
+                 "price":10.00,"currency":"PEN"}
+                """.formatted(category.getId());
+        String disable = "{\"published\":false}";
+
+        mockMvc.perform(put("/api/v1/admin/products/{id}", product.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_CUSTOMER"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/v1/admin/products/{id}", product.getId())
+                        .with(jwt().authorities(createAuthorityList("ROLE_CUSTOMER"))).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(disable))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/v1/admin/products/{id}", product.getId()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/api/v1/admin/products/{id}", product.getId()).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(disable))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void rejectsInvalidAdminRequestWithProblemDetails() throws Exception {
+        String request = """
+                {"sku":"","name":"Bad price","category_id":1,
+                 "price":0,"currency":"USD"}
+                """;
+        mockMvc.perform(post("/api/v1/admin/products")
+                        .with(jwt().authorities(createAuthorityList("ROLE_ADMIN")))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
     }
 
     private Product product(String sku, String name, Category category, boolean published) {
