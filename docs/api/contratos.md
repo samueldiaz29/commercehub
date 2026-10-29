@@ -173,30 +173,43 @@ Todas las respuestas con código de error (HTTP 4xx / 5xx) utilizarán el esquem
 
 ### 2.3 Order Service (`order-service`)
 
-#### `GET /api/v1/cart` `[PROPUESTA PENDIENTE]`
-- **Propósito:** Obtener el carrito del usuario autenticado.
-- **Acceso:** `CUSTOMER`.
-- **Respuesta Exitosa (HTTP 200 OK):**
+#### HU-CART-01 — Carrito persistente
+
+Todas las rutas de carrito requieren JWT válido emitido por el issuer Keycloak configurado y rol `CUSTOMER` en `realm_access.roles`. El propietario siempre se obtiene del claim `sub`; el contrato no acepta `user_id`/`customer_id` para identificarlo. Los identificadores de producto son los IDs numéricos `BIGINT` del catálogo. El carrito ausente se representa como carrito vacío (HTTP 200) y se persiste al agregar el primer artículo.
+
+##### `GET /api/v1/cart`
+- **Propósito:** Consultar el carrito propio y recalcular importes en PEN desde los precios actuales del catálogo.
+- **Respuesta (HTTP 200 OK):**
 ```json
 {
-  "cart_id": "cart-1234",
-  "customer_id": "usr-5678",
-  "items": [
-    {
-      "item_id": "ci-01",
-      "product_id": "prod-e3b0c442-98fc-1c14-9afbf4c8996f",
-      "product_name": "Laptop Pro 14",
-      "unit_price": 6499.00,
-      "quantity": 1,
-      "subtotal": 6499.00
-    }
-  ],
-  "subtotal_amount": 6499.00,
-  "shipping_fee": 10.00,
-  "total_amount": 6509.00,
-  "currency": "PEN"
+  "currency": "PEN",
+  "items": [{ "product_id": 1, "quantity": 2, "unit_price": 25.50, "line_subtotal": 51.00, "currency": "PEN" }],
+  "subtotal": 51.00,
+  "shipping": 10.00,
+  "total": 61.00
 }
 ```
+Un carrito vacío devuelve `items: []` y subtotal, envío y total `0.00`.
+
+##### `POST /api/v1/cart/items`
+- **Propósito:** Agregar un producto publicado. El request contiene `{ "product_id": 1, "quantity": 2 }`. `quantity` es entero y mínimo 1. Repetir el producto incrementa la cantidad existente.
+- **Respuesta:** HTTP 200 con el resumen recalculado.
+- Producto inexistente/no publicado: `404`; cantidad/cuerpo inválido: `400`; fallo o indisponibilidad del catálogo: `503`, todos con Problem Details.
+- Conflicto por cambios concurrentes del carrito o por una creación simultánea: `409 Conflict` con Problem Details genérico; el cliente puede volver a consultar y reintentar la operación.
+
+##### `PATCH /api/v1/cart/items/{productId}`
+- **Propósito:** Reemplazar la cantidad del artículo existente. Request `{ "quantity": 3 }`, mínimo 1.
+- **Respuesta:** HTTP 200 con el resumen recalculado. Carrito/artículo inexistente: `404`; cantidad inválida: `400`.
+- Conflicto de integridad/concurrencia: `409 Conflict` con Problem Details.
+
+##### `DELETE /api/v1/cart/items/{productId}`
+- **Propósito:** Retirar un artículo del carrito propio.
+- **Respuesta:** HTTP `200` con el resumen recalculado de los artículos restantes. Artículo inexistente: `404`.
+- Conflicto de integridad/concurrencia: `409 Conflict` con Problem Details.
+
+Usuario anónimo: `401`; JWT autenticado sin `CUSTOMER` (incluido `ADMIN` sin dicho rol): `403`. Las respuestas usan DTOs y Problem Details RFC 9457. El carrito guarda únicamente ID de producto y cantidad; no reserva ni descuenta inventario. No existe FK hacia catálogo por la autonomía de bases de datos.
+
+**Precio pendiente de decisión:** el resumen consulta el endpoint público `GET /api/v1/products/{id}` de `catalog-service` y usa el precio PEN vigente para cada respuesta. No se persiste/congela precio ni se define una política para cambios de precio al checkout. Esta implementación hace posible el importe actual del resumen, pero no resuelve DP-01; se requiere decisión antes de implementar checkout.
 
 #### `POST /api/v1/checkout` `[PROPUESTA PENDIENTE]`
 - **Propósito:** Iniciar la Saga de Checkout con los datos de entrega y el método de pago simulado.
