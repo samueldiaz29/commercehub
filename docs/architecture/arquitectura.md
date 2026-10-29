@@ -130,6 +130,12 @@ La HU aprobada respalda edición y deshabilitación de productos, aunque los con
   - Cálculo de totales de compra incorporando la tarifa plana de envío de **S/ 10.00**.
   - Publicación de eventos de dominio a través del patrón **Transactional Outbox**.
 
+#### Carrito HU-CART-01
+
+El carrito se almacena en `order_db` mediante las tablas `carts` y `cart_items`, con una fila única por `customer_id` (claim JWT `sub`), artículos únicos por producto y cantidad positiva. Las escrituras bloquean la fila del carrito con `PESSIMISTIC_WRITE` para serializar cambios a un carrito existente; antes de aplicar la escritura comparan la instantánea leída para consultar precios. Si otra operación cambió el contenido durante esa consulta, responden `409` y no aplican datos de catálogo obsoletos. Las restricciones únicas de PostgreSQL protegen también contra duplicados al crear el primer carrito. `order-service` no consulta ni comparte la base de datos de catálogo: valida y obtiene precio usando `GET /api/v1/products/{id}`. Las llamadas HTTP ocurren fuera de las transacciones JPA. La operación no toca inventario. Solo `CUSTOMER` puede invocar `/api/v1/cart/**`; el Resource Server valida issuer/firma JWT y convierte `realm_access.roles` en autoridades.
+
+El DTO de respuesta se calcula en el servidor con `BigDecimal`, precio PEN vigente del catálogo, subtotal por línea y tarifa de envío S/ 10.00; para un carrito vacío los importes son cero. Las consultas actuales al catálogo se realizan al agregar y al presentar el resumen; un error de catálogo interrumpe el cálculo y produce `503`. El precio no se congela en la base de datos. DP-01 sigue pendiente, por lo que esta funcionalidad no establece la política de variación de precio para checkout. Las migraciones del esquema se ejecutan con Flyway y Hibernate valida el DDL (`ddl-auto=validate`).
+
 ### 2.5 Payment Service (`payment-service`) `[DECISIÓN APROBADA]`
 - **Tecnología:** Java 25, Spring Boot, Spring MVC, Spring Data JPA, Flyway, PostgreSQL.
 - **Límites de Responsabilidad:**
