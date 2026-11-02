@@ -56,6 +56,14 @@ Este documento compila las políticas, invariantes y reglas de negocio del domin
 
 ## 2. Reglas de Arquitectura Distribuida e Integración `[DECISIONES APROBADAS]`
 
+### RN-ORD-04: Política de precios durante el checkout (DP-01)
+- El carrito muestra en cada consulta el precio PEN vigente de `catalog-service`; agregar un producto no congela su precio.
+- Al iniciar checkout, antes de solicitar cualquier reserva de inventario, `order-service` valida los precios vigentes contra los que se mostraron al cliente en el carrito.
+- Si cambió al menos un precio, el intento se detiene antes de reservar stock o procesar pagos. El cliente debe revisar el carrito actualizado y volver a intentar. No se realizan reservas parciales.
+- Si la validación termina correctamente, el pedido preliminar guarda un snapshot monetario histórico con, como mínimo, identificador del producto, nombre/descripción, precio unitario validado, cantidad, subtotal por artículo, subtotal general, envío, moneda y total.
+- Los importes del snapshot no dependen de consultas futuras al catálogo ni cambian retroactivamente. Se conservan durante el checkout de 15 minutos y después de que finalice, expire o sea compensado.
+- La moneda es PEN. El envío es S/ 10.00 si hay artículos y S/ 0.00 si el carrito está vacío; un carrito vacío no puede iniciar checkout.
+
 ### RN-DIST-01: Autonomía de Datos y Ausencia de Transacciones ACID Globales
 - Cada microservicio posee y administra su propio esquema de base de datos relacional PostgreSQL.
 - Se prohíbe el acceso cruzado directo a esquemas ajenos y el uso de coordinadores de transacciones distribuidas basadas en dos fases (2PC / XA).
@@ -80,7 +88,6 @@ A continuación se registran las contradicciones técnicas y vacíos comerciales
 
 | ID | Tema | Descripción de la Duda / Contradicción | Impacto Técnico | Alternativas a Evaluar |
 | :--- | :--- | :--- | :--- | :--- |
-| **DP-01** | **Fluctuación de Precios en Carrito** | Si un producto cambia de precio en el catálogo mientras un cliente lo tiene en el carrito: ¿se debe congelar el precio en el carrito o actualizarlo automáticamente al iniciar el checkout? | Inconsistencia entre total del carrito y monto cobrado en la pasarela. | **A:** Actualizar al checkout y alertar al cliente si subió. <br>**B:** Bloquear precio por tiempo limitado (no recomendado). |
 | **DP-02** | **Reingreso de Stock tras Cancelación de Venta** | Cuando el cliente cancela un pedido confirmado (antes de preparación), el dinero se reembolsa: ¿el stock deducido se devuelve automáticamente a disponible mediante un comando a `inventory-service`, o requiere validación de almacén? | Falta definir si la Saga de cancelación incluye compensación automática de inventario. | **A:** Compensación automática inmediata vía evento `OrderCancelled`. <br>**B:** Retención en cuarentena de inventario. |
 | **DP-03** | **Detección del Vencimiento de Reserva (TTL 15 min)** | ¿Quién es el responsable cronológico de detectar los 15 minutos de la reserva? ¿Un proceso programado (*scheduler*) en `inventory-service` que publica `InventoryReservationExpired`, o un temporizador en `order-service`? | Duplicidad de temporizadores o desincronización horaria entre servicios. | **A:** Scheduler en `inventory-service` que expira registros vencidos y emite evento. <br>**B:** RabbitMQ Dead-Letter / TTL message. |
 | **DP-04** | **Canal de Comunicación de la Saga (HTTP vs RabbitMQ)** | Para la Saga orquestada por `order-service`: ¿las llamadas de reserva a `inventory-service` y cobro a `payment-service` son REST síncronas con reintentos/circuit breaker, o comandos asíncronos mediante colas dedicadas de RabbitMQ? | Complejidad de implementación y latencia percibida por el usuario en el checkout. | **A:** Llamadas REST internas síncronas con timeout estricto + Outbox para eventos. <br>**B:** Comandos 100% asíncronos sobre RabbitMQ. |

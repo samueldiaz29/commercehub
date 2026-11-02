@@ -124,17 +124,16 @@ La HU aprobada respalda edición y deshabilitación de productos, aunque los con
 - **Tecnología:** Java 25, Spring Boot, Spring MVC, Spring Data JPA, Flyway, PostgreSQL.
 - **Límites de Responsabilidad:**
   - Persistencia y gestión del Carrito de Compras de los clientes autenticados.
-  - Creación y mantenimiento del ciclo de vida del Pedido (`Order`: `DRAFT`, `CHECKOUT_PENDING`, `CONFIRMED`, `IN_PREPARATION`, `SHIPPED`, `DELIVERED`, `CANCELLED`).
-  - **Coordinación y Orquestación Persistente de la Saga de Checkout.**
+  - Persistencia y gestión del carrito están implementadas en el Issue #7. La creación/mantenimiento de pedidos y la orquestación de la Saga de Checkout son responsabilidades previstas, todavía no implementadas.
   - Ejecución de la política de cancelación directa del cliente (exclusivamente permitida antes de `IN_PREPARATION`).
-  - Cálculo de totales de compra incorporando la tarifa plana de envío de **S/ 10.00**.
+  - Para el carrito, cálculo de importes con precios vigentes del catálogo. Durante el checkout futuro, validará los precios antes de solicitar reservas y persistirá el snapshot monetario aprobado en DP-01.
   - Publicación de eventos de dominio a través del patrón **Transactional Outbox**.
 
 #### Carrito HU-CART-01
 
 El carrito se almacena en `order_db` mediante las tablas `carts` y `cart_items`, con una fila única por `customer_id` (claim JWT `sub`), artículos únicos por producto y cantidad positiva. Las escrituras bloquean la fila del carrito con `PESSIMISTIC_WRITE` para serializar cambios a un carrito existente; antes de aplicar la escritura comparan la instantánea leída para consultar precios. Si otra operación cambió el contenido durante esa consulta, responden `409` y no aplican datos de catálogo obsoletos. Las restricciones únicas de PostgreSQL protegen también contra duplicados al crear el primer carrito. `order-service` no consulta ni comparte la base de datos de catálogo: valida y obtiene precio usando `GET /api/v1/products/{id}`. Las llamadas HTTP ocurren fuera de las transacciones JPA. La operación no toca inventario. Solo `CUSTOMER` puede invocar `/api/v1/cart/**`; el Resource Server valida issuer/firma JWT y convierte `realm_access.roles` en autoridades.
 
-El DTO de respuesta se calcula en el servidor con `BigDecimal`, precio PEN vigente del catálogo, subtotal por línea y tarifa de envío S/ 10.00; para un carrito vacío los importes son cero. Las consultas actuales al catálogo se realizan al agregar y al presentar el resumen; un error de catálogo interrumpe el cálculo y produce `503`. El precio no se congela en la base de datos. DP-01 sigue pendiente, por lo que esta funcionalidad no establece la política de variación de precio para checkout. Las migraciones del esquema se ejecutan con Flyway y Hibernate valida el DDL (`ddl-auto=validate`).
+El DTO del carrito implementado se calcula en el servidor con `BigDecimal` y el precio PEN vigente del catálogo: incluye subtotal por línea y envío S/ 10.00 cuando hay artículos; para un carrito vacío, los importes son cero. Las consultas actuales al catálogo se realizan al agregar y al presentar el resumen; un error de catálogo interrumpe el cálculo y produce `503`. El carrito guarda únicamente producto y cantidad, por lo que no congela el precio. Conforme a DP-01 aprobada, el checkout futuro deberá validar el precio vigente antes de reservar inventario; ante una variación, detendrá el intento sin reservas ni pagos y pedirá al cliente revisar el carrito actualizado. Tras una validación correcta, guardará los importes en un snapshot histórico e inmutable con los campos definidos en las reglas transversales. Checkout, pedidos y ese snapshot aún no están implementados. Las migraciones del esquema se ejecutan con Flyway y Hibernate valida el DDL (`ddl-auto=validate`).
 
 ### 2.5 Payment Service (`payment-service`) `[DECISIÓN APROBADA]`
 - **Tecnología:** Java 25, Spring Boot, Spring MVC, Spring Data JPA, Flyway, PostgreSQL.

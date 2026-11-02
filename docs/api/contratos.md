@@ -209,9 +209,11 @@ Un carrito vacío devuelve `items: []` y subtotal, envío y total `0.00`.
 
 Usuario anónimo: `401`; JWT autenticado sin `CUSTOMER` (incluido `ADMIN` sin dicho rol): `403`. Las respuestas usan DTOs y Problem Details RFC 9457. El carrito guarda únicamente ID de producto y cantidad; no reserva ni descuenta inventario. No existe FK hacia catálogo por la autonomía de bases de datos.
 
-**Precio pendiente de decisión:** el resumen consulta el endpoint público `GET /api/v1/products/{id}` de `catalog-service` y usa el precio PEN vigente para cada respuesta. No se persiste/congela precio ni se define una política para cambios de precio al checkout. Esta implementación hace posible el importe actual del resumen, pero no resuelve DP-01; se requiere decisión antes de implementar checkout.
+El resumen del carrito consulta `GET /api/v1/products/{id}` de `catalog-service` y usa el precio PEN vigente para cada respuesta; el carrito no persiste ni congela el precio. Según DP-01 aprobada, antes de reservar inventario el checkout futuro debe validar esos precios frente a los mostrados en el carrito. Si alguno cambió, detendrá el intento sin reserva parcial ni procesamiento de pago y el cliente deberá revisar el resumen actualizado y reintentar. Tras validar, el pedido preliminar persistirá un snapshot histórico por artículo y general: identificador y nombre/descripción del producto, precio unitario, cantidad, subtotal por artículo, subtotal general, envío, moneda y total. Ese snapshot permanecerá sin cambios durante los 15 minutos de checkout y después de finalizar, expirar o compensarse, independientemente del catálogo. La tarifa es PEN 10.00 con artículos, cero para carrito vacío; un carrito vacío no inicia checkout. Los detalles del contrato HTTP para comunicar cambios de precio y los campos/estructura concretos del snapshot deben definirse en el Issue de implementación de checkout; no se fijan aquí nuevos DTOs, códigos ni estados. El endpoint de checkout que sigue es una propuesta pendiente y no está implementado.
 
 #### `POST /api/v1/checkout` `[PROPUESTA PENDIENTE]`
+> Contrato futuro no implementado. La solicitud solo podrá avanzar a reserva después de validar los precios según DP-01; si hay cambios, se detendrá antes de reserva y pago. La respuesta y los DTOs específicos para ese caso deben definirse en el Issue correspondiente.
+
 - **Propósito:** Iniciar la Saga de Checkout con los datos de entrega y el método de pago simulado.
 - **Acceso:** `CUSTOMER`.
 - **Headers Obligatorios:** `Idempotency-Key: <UUID>`.

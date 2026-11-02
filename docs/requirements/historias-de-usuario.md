@@ -60,10 +60,14 @@ Este documento compila las Historias de Usuario (HU) y sus Criterios de Aceptaci
 **Para** asegurar temporalmente las unidades antes de efectuar el pago.
 
 **Criterios de Aceptación:**
-1. Al pulsar "Iniciar Checkout", el `order-service` crea un pedido en estado preliminar y solicita a `inventory-service` una reserva temporal de stock.
-2. La reserva de inventario tiene una vigencia estricta de **15 minutos**.
-3. Si algún ítem no cuenta con stock suficiente disponible, el checkout es rechazado inmediatamente indicando el producto agotado y no se crea ninguna reserva parcial.
-4. El cliente dispone de un temporizador visible de 15 minutos para completar el pago.
+1. Antes de solicitar reservas, `order-service` valida los precios vigentes contra los que se mostraron en el carrito. Si alguno cambió, el intento se detiene sin reservar stock ni procesar pagos; el cliente revisa el carrito actualizado y vuelve a intentarlo. No se realizan reservas parciales.
+2. Tras validar correctamente los precios, el pedido preliminar guarda un snapshot monetario con identificador y nombre/descripción de cada producto, precio unitario validado, cantidad, subtotal por artículo, subtotal general, envío, moneda y total. Los importes son históricos, no dependen de futuras consultas al catálogo y se conservan durante el checkout de **15 minutos** y después de finalizar, expirar o compensarse.
+3. La moneda es PEN. El envío es S/ 10.00 si el carrito contiene artículos y S/ 0.00 si está vacío; un carrito vacío no puede iniciar checkout.
+4. El pedido preliminar solicita una reserva temporal de stock a `inventory-service`; la reserva tiene una vigencia estricta de **15 minutos**.
+5. Si algún ítem no cuenta con stock suficiente disponible, el checkout es rechazado indicando el producto agotado y no se crea ninguna reserva parcial.
+6. El cliente dispone de un temporizador visible de 15 minutos para completar el pago.
+
+La historia define requisitos de negocio. El checkout y la creación de pedidos/reservas todavía no están implementados; el contrato HTTP detallado debe definirse en sus Issues de implementación.
 
 ### HU-CHK-02: Procesamiento del Pago Simulado e Idempotente `[DECISIÓN APROBADA]`
 **Como** cliente en proceso de checkout,  
